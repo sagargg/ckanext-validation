@@ -73,6 +73,19 @@ def run_validation_job(resource):
 
                 options[u'http_session'] = s
 
+
+    if dataset[u'private']:
+        pass_auth_header = t.asbool(
+                t.config.get(u'ckanext.validation.pass_auth_header', True))
+        s = requests.Session()
+        s.headers.update({
+            u'Authorization': t.config.get(
+                u'ckanext.validation.pass_auth_header_value',
+                _get_site_user_api_key())
+        })
+
+        options[u'http_session'] = s
+                
     if not source:
         source = resource[u'url']
 
@@ -108,13 +121,20 @@ def run_validation_job(resource):
     Session.commit()
 
     # Store result status in resource
-    t.get_action('resource_patch')(
+    resource_dict = t.get_action('resource_show')(
+        {'ignore_auth': True},
+        {'id': resource['id']})
+
+    patched = dict(resource_dict)
+    patched.update({'id': resource['id'],
+        'validation_status': validation.status,
+        'validation_timestamp': validation.finished.isoformat()})
+
+    t.get_action('resource_update')(
         {'ignore_auth': True,
          'user': t.get_action('get_site_user')({'ignore_auth': True})['name'],
          '_validation_performed': True},
-        {'id': resource['id'],
-         'validation_status': validation.status,
-         'validation_timestamp': validation.finished.isoformat()})
+        patched)
 
 
 def _validate_table(source, _format=u'csv', schema=None, **options):
